@@ -1,0 +1,114 @@
+-- improved one
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
+
+Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+local LobbyPos = workspace.Lobby.VoteStation.pad3.Position
+
+local function Notify(title, text, dur)
+    StarterGui:SetCore("SendNotification", {
+        Title = title, Text = text, Duration = dur or 3
+    })
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    HRP = char:WaitForChild("HumanoidRootPart")
+    Humanoid = char:WaitForChild("Humanoid")
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+end)
+
+getgenv().NewAutofarm = true
+Notify("Autofarm", "Enabled", 2)
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local ScreenGui = PlayerGui:WaitForChild("ScreenGui")
+local UI = ScreenGui:WaitForChild("UI")
+local TargetLabel = UI:WaitForChild("Target")
+local TargetText = TargetLabel:WaitForChild("TargetText")
+
+local targetChar = nil
+local targetHRP = nil
+local attacking = false
+local waitingForRound = false
+
+local function getTargetByUI()
+    if TargetLabel.Visible and TargetText.Text ~= "" then
+        return Players:FindFirstChild(TargetText.Text)
+    end
+end
+
+local function isAlive(char)
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function tryAttack(target)
+    if attacking then return end
+    attacking = true
+
+    local hitCheck = LocalPlayer.PlayerScripts:FindFirstChild("localknifehandler")
+    if hitCheck and hitCheck:FindFirstChild("HitCheck") then
+        for _ = 1, 3 do
+            if not isAlive(target) then break end
+            hitCheck.HitCheck:Fire(target)
+            task.wait(0.35)
+        end
+    end
+
+    task.wait(0.5)
+    attacking = false
+end
+
+RunService.RenderStepped:Connect(function()
+    if not getgenv().NewAutofarm then return end
+    if not HRP or not Humanoid then return end
+
+    local dist = (LobbyPos - HRP.Position).Magnitude
+
+    -- Original blocking 
+    if dist > 300 and not waitingForRound then
+        task.wait(9.5)
+        waitingForRound = true
+    elseif dist < 300 then
+        waitingForRound = false
+    end
+
+    if dist > 300 and workspace.Gravity ~= 0 then
+        workspace.Gravity = 0
+    elseif dist < 300 and Character and HRP and workspace.Gravity == 0 then
+        workspace.Gravity = 196.2
+        Humanoid.Health = 0
+        return
+    end
+
+    if dist > 300 then
+        local uiTarget = getTargetByUI()
+        targetChar = uiTarget and workspace:FindFirstChild(uiTarget.Name) or nil
+
+        -- Unstick 
+        if not isAlive(targetChar) then
+            targetChar = nil
+            targetHRP = nil
+            attacking = false
+            return
+        end
+
+        targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+        if targetHRP then
+            HRP.CFrame = targetHRP.CFrame * CFrame.new(0.4, 0.2, 1.3)
+            task.spawn(function()
+                tryAttack(targetChar)
+            end)
+        end
+    end
+end)
